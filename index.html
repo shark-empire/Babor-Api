@@ -3,61 +3,109 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SCI-FI DATA — Fast Mobile Data Bundles Ghana</title>
-  <meta name="description" content="Instant mobile data bundles for MTN, Telecel and AirtelTigo in Ghana. Buy data online, fund your wallet, track orders." />
-  <meta name="theme-color" content="#06080F" />
+  <title>SCI-FI DATA</title>
+  <meta name="description" content="Instant mobile data bundles for MTN, Telecel and AirtelTigo in Ghana." />
   <link rel="icon" href="https://i.imgur.com/wKOG6wP.png" />
-
-  <!-- React + Babel (CDN — no build step needed) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Paystack -->
-  <script src="https://js.paystack.co/v1/inline.js"></script>
-
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #06080F; color: #F0F4FF; font-family: sans-serif; }
-    #root { min-height: 100vh; }
-    #splash {
-      position: fixed; inset: 0; background: #06080F;
-      display: flex; align-items: center; justify-content: center;
-      flex-direction: column; gap: 16px; z-index: 9999;
-      transition: opacity 0.4s ease;
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#06080F;color:#F0F4FF;font-family:sans-serif;min-height:100vh}
+    #root{min-height:100vh}
+    #splash{
+      position:fixed;inset:0;background:#06080F;
+      display:flex;align-items:center;justify-content:center;
+      flex-direction:column;gap:20px;z-index:9999;
+      transition:opacity 0.5s ease;
     }
-    #splash img { height: 60px; width: auto; filter: drop-shadow(0 0 12px rgba(0,212,255,0.5)); }
-    #splash p { color: #8892A4; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; font-family: monospace; }
-    .splash-bar {
-      width: 160px; height: 2px; background: rgba(255,255,255,0.07);
-      border-radius: 99px; overflow: hidden;
-    }
-    .splash-fill {
-      height: 100%; background: linear-gradient(90deg, #4F46E5, #00D4FF);
-      border-radius: 99px; animation: load 1.2s ease forwards;
-    }
-    @keyframes load { from { width: 0 } to { width: 100% } }
+    #splash img{height:72px;width:auto;filter:drop-shadow(0 0 16px rgba(0,212,255,0.6));border-radius:12px}
+    #splash-text{color:#8892A4;font-size:12px;letter-spacing:3px;text-transform:uppercase;font-family:monospace}
+    .splash-bar{width:200px;height:3px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden}
+    .splash-fill{height:100%;background:linear-gradient(90deg,#4F46E5,#00D4FF);border-radius:99px;width:0;transition:width 0.3s ease}
+    #err{display:none;color:#F87171;font-size:13px;text-align:center;max-width:300px;line-height:1.6;padding:0 20px}
   </style>
 </head>
 <body>
 
-<!-- Splash screen -->
 <div id="splash">
   <img src="https://i.imgur.com/wKOG6wP.png" alt="SCI-FI DATA" onerror="this.style.display='none'" />
-  <div class="splash-bar"><div class="splash-fill"></div></div>
-  <p>Initializing...</p>
+  <div class="splash-bar"><div class="splash-fill" id="bar"></div></div>
+  <div id="splash-text">Loading...</div>
+  <div id="err"></div>
 </div>
 
 <div id="root"></div>
 
-<script type="text/babel" data-presets="react">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://js.paystack.co/v1/inline.js"></script>
+
+<script>
+var bar = document.getElementById('bar');
+var pct = 0;
+var barTimer = setInterval(function(){
+  pct = Math.min(pct + (pct < 60 ? 3 : 0.4), 88);
+  bar.style.width = pct + '%';
+}, 100);
+
+function setStatus(msg){ document.getElementById('splash-text').textContent = msg; }
+function setProgress(p){ bar.style.width = p + '%'; pct = p; }
+
+function showError(msg){
+  clearInterval(barTimer);
+  bar.style.width = '100%';
+  bar.style.background = '#EF4444';
+  setStatus('Failed to load');
+  var e = document.getElementById('err');
+  e.style.display = 'block';
+  e.innerHTML = msg + '<br><br><button onclick="location.reload()" style="margin-top:8px;padding:8px 16px;background:#4F46E5;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px">Retry</button>';
+}
+
+function hideSplash(){
+  clearInterval(barTimer);
+  bar.style.width = '100%';
+  var splash = document.getElementById('splash');
+  setTimeout(function(){
+    splash.style.opacity = '0';
+    setTimeout(function(){ splash.style.display = 'none'; }, 500);
+  }, 200);
+}
+
+setStatus('Loading...');
+var babelScript = document.createElement('script');
+babelScript.src = 'https://unpkg.com/@babel/standalone@7.23.6/babel.min.js';
+babelScript.onload = function(){
+  setStatus('Starting app...');
+  setProgress(60);
+  setTimeout(function(){
+    try {
+      var src = document.getElementById('app-src').textContent;
+      var out = Babel.transform(src, {
+        presets: [['react', {runtime:'classic'}]],
+        filename: 'app.jsx'
+      }).code;
+      setProgress(90);
+      setTimeout(function(){
+        try {
+          var run = new Function('React','ReactDOM', out + '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));');
+          run(React, ReactDOM);
+          hideSplash();
+        } catch(e){ showError('App error: ' + e.message); console.error(e); }
+      }, 30);
+    } catch(e){ showError('Build error: ' + e.message); console.error(e); }
+  }, 80);
+};
+babelScript.onerror = function(){
+  showError('Could not load. Check internet and refresh.');
+};
+document.head.appendChild(babelScript);
+</script>
+
+<script type="text/plain" id="app-src">
 const { useState, useEffect, useCallback, useRef } = React;
 
 // ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
-
-const SUPABASE_URL = "https://zhinkuoqxsmotnbsjdue.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoaW5rdW9xeHNtb3RuYnNqZHVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTc1MzIsImV4cCI6MjA4Nzk3MzUzMn0.Kw5BDJDH9WOAiE3a-P6ylQiseErYG-mHCFi5fgamnUY";
-const PAYSTACK_PUBLIC_KEY = "pk_live_68410a36c97591a8e61aa8fc998b9e39cf51b92f";
+const SUPABASE_URL = "YOUR_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const PAYSTACK_PUBLIC_KEY = "YOUR_PAYSTACK_PUBLIC_KEY";
 const SITE_NAME = "SCI-FI DATA";
 const LOGO_URL = "https://i.imgur.com/wKOG6wP.png";
 
@@ -2051,15 +2099,6 @@ function App() {
   );
 }
 
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-
-// Hide splash after React mounts
-setTimeout(() => {
-  const splash = document.getElementById('splash');
-  if (splash) { splash.style.opacity = '0'; setTimeout(() => splash.remove(), 400); }
-}, 1400);
 </script>
 
 </body>
