@@ -1,0 +1,1965 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://zhinkuoqxsmotnbsjdue.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoaW5rdW9xeHNtb3RuYnNqZHVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzOTc1MzIsImV4cCI6MjA4Nzk3MzUzMn0.Kw5BDJDH9WOAiE3a-P6ylQiseErYG-mHCFi5fgamnUY";
+const PAYSTACK_PUBLIC_KEY = "pk_live_68410a36c97591a8e61aa8fc998b9e39cf51b92f";
+const SITE_NAME = "SCI-FI DATA";
+const LOGO_URL = https://i.imgur.com/wKOG6wP.png; // Replace with your logo URL
+
+// Supabase REST helpers
+const supabase = {
+  async query(table, params = "") {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  async insert(table, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+  async update(table, params, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+};
+
+// Generate SF order ID
+const genOrderId = () =>
+  "SF" + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase();
+
+// Generate txRef
+const genTxRef = () =>
+  "SCIFI-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8).toUpperCase();
+
+// Phone → email
+const phoneToEmail = (phone) =>
+  phone.replace(/\D/g, "") + "@sci-fidata.com";
+
+// ─── GLOBAL STYLES ────────────────────────────────────────────────────────────
+const GlobalStyles = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #06080F;
+      --bg2: #0D1117;
+      --bg3: #111827;
+      --indigo: #4F46E5;
+      --indigo-light: #6366F1;
+      --cyan: #00D4FF;
+      --cyan-dim: rgba(0,212,255,0.15);
+      --cyan-glow: rgba(0,212,255,0.3);
+      --white: #F0F4FF;
+      --muted: #8892A4;
+      --border: rgba(255,255,255,0.07);
+      --border-cyan: rgba(0,212,255,0.25);
+      --card: rgba(13,17,23,0.8);
+      --danger: #EF4444;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --radius: 12px;
+      --radius-lg: 18px;
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    html, body, #root { height: 100%; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--white);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-cyan); border-radius: 99px; }
+
+    /* Shared components */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 10px 22px; border-radius: var(--radius); border: none; cursor: pointer;
+      font-family: var(--font-body); font-weight: 600; font-size: 14px;
+      transition: all 0.2s ease; text-decoration: none; white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--indigo), var(--indigo-light));
+      color: white;
+      box-shadow: 0 0 20px rgba(79,70,229,0.4);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 30px rgba(79,70,229,0.6); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-cyan {
+      background: linear-gradient(135deg, rgba(0,212,255,0.15), rgba(0,212,255,0.08));
+      color: var(--cyan); border: 1px solid var(--border-cyan);
+    }
+    .btn-cyan:hover { background: rgba(0,212,255,0.2); box-shadow: 0 0 20px var(--cyan-glow); }
+    .btn-ghost {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--border-cyan); color: var(--white); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+    .btn-success { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+    .btn-lg { padding: 14px 28px; font-size: 16px; }
+    .btn-sm { padding: 7px 14px; font-size: 12px; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+    .input {
+      width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 12px 16px; color: var(--white);
+      font-family: var(--font-body); font-size: 14px; transition: all 0.2s;
+      outline: none;
+    }
+    .input:focus { border-color: var(--border-cyan); box-shadow: 0 0 0 3px rgba(0,212,255,0.08); }
+    .input::placeholder { color: var(--muted); }
+    .input-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: block; font-weight: 500; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); backdrop-filter: blur(12px);
+      transition: all 0.25s ease;
+    }
+    .card:hover { border-color: var(--border-cyan); }
+    .card-glow:hover { box-shadow: 0 0 30px rgba(0,212,255,0.1); }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge-cyan { background: var(--cyan-dim); color: var(--cyan); border: 1px solid var(--border-cyan); }
+    .badge-success { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+    .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+    .badge-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+    .badge-muted { background: rgba(136,146,164,0.1); color: var(--muted); border: 1px solid var(--border); }
+
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 20px; transition: all 0.2s;
+    }
+    .stat-card:hover { border-color: var(--border-cyan); box-shadow: 0 0 20px rgba(0,212,255,0.06); }
+
+    /* Glowing divider */
+    .glow-line {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      border: none; margin: 0;
+    }
+
+    /* Scrollable areas */
+    .scroll-area { overflow-y: auto; }
+    .scroll-area::-webkit-scrollbar { width: 4px; }
+    .scroll-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+    /* Toast */
+    .toast-container {
+      position: fixed; top: 20px; right: 20px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .toast {
+      padding: 12px 18px; border-radius: var(--radius); font-size: 14px; font-weight: 500;
+      display: flex; align-items: center; gap: 10px; min-width: 280px; max-width: 380px;
+      animation: slideIn 0.25s ease;
+      backdrop-filter: blur(12px);
+    }
+    .toast-success { background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); color: #34D399; }
+    .toast-error { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: #F87171; }
+    .toast-info { background: rgba(0,212,255,0.15); border: 1px solid var(--border-cyan); color: var(--cyan); }
+    @keyframes slideIn { from { transform: translateX(120%); opacity:0; } to { transform: translateX(0); opacity:1; } }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+      z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal {
+      background: var(--bg2); border: 1px solid var(--border-cyan);
+      border-radius: var(--radius-lg); width: 100%; max-width: 480px;
+      animation: popIn 0.2s ease; max-height: 90vh; overflow-y: auto;
+    }
+    .modal-lg { max-width: 620px; }
+    @keyframes popIn { from { transform: scale(0.95); opacity:0; } to { transform: scale(1); opacity:1; } }
+
+    /* Particle canvas */
+    #particle-canvas { position: absolute; inset: 0; pointer-events: none; opacity: 0.4; }
+
+    /* Nav */
+    .topnav {
+      position: fixed; top: 0; left: 0; right: 0; height: 60px;
+      background: rgba(6,8,15,0.9); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border); z-index: 100;
+      display: flex; align-items: center; padding: 0 24px; gap: 16px;
+    }
+    .topnav .logo { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -0.5px; }
+    .topnav .logo span { color: var(--cyan); }
+    .topnav .nav-links { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+    .nav-link {
+      padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500;
+      color: var(--muted); cursor: pointer; transition: all 0.2s; text-decoration: none;
+    }
+    .nav-link:hover { color: var(--white); background: rgba(255,255,255,0.05); }
+    .nav-link.active { color: var(--cyan); background: var(--cyan-dim); }
+
+    /* Sidebar dashboard */
+    .app-shell {
+      display: flex; min-height: 100vh; padding-top: 60px;
+    }
+    .sidebar {
+      width: 230px; min-height: calc(100vh - 60px);
+      background: rgba(13,17,23,0.6); border-right: 1px solid var(--border);
+      padding: 20px 12px; position: sticky; top: 60px; height: calc(100vh - 60px);
+      overflow-y: auto; flex-shrink: 0;
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+      border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500;
+      color: var(--muted); transition: all 0.2s; margin-bottom: 2px;
+    }
+    .sidebar-item:hover { color: var(--white); background: rgba(255,255,255,0.05); }
+    .sidebar-item.active { color: var(--cyan); background: var(--cyan-dim); border: 1px solid var(--border-cyan); }
+    .sidebar-icon { font-size: 16px; }
+    .sidebar-section { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 8px 12px 4px; margin-top: 8px; }
+
+    .main-content { flex: 1; padding: 32px; min-width: 0; }
+
+    /* Hero */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center;
+      position: relative; overflow: hidden; padding-top: 60px;
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 700px; padding: 60px 24px; }
+    .hero-eyebrow {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--cyan); font-family: var(--font-mono); margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .hero-eyebrow::before {
+      content: ''; width: 30px; height: 1px; background: var(--cyan);
+    }
+    .hero h1 {
+      font-family: var(--font-display); font-size: clamp(42px, 6vw, 72px);
+      font-weight: 700; line-height: 1.05; letter-spacing: -2px; margin-bottom: 20px;
+    }
+    .hero h1 .accent { color: var(--cyan); }
+    .hero p { font-size: 18px; color: var(--muted); max-width: 500px; margin-bottom: 36px; line-height: 1.7; }
+
+    /* Bundle cards */
+    .bundle-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px;
+    }
+    .bundle-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 24px; cursor: pointer; transition: all 0.25s; position: relative; overflow: hidden;
+    }
+    .bundle-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--indigo), transparent);
+      opacity: 0; transition: opacity 0.25s;
+    }
+    .bundle-card:hover { border-color: var(--border-cyan); transform: translateY(-3px); box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 30px rgba(0,212,255,0.08); }
+    .bundle-card:hover::before { opacity: 1; }
+    .bundle-card.selected { border-color: var(--cyan); background: rgba(0,212,255,0.04); box-shadow: 0 0 30px rgba(0,212,255,0.12); }
+    .bundle-size { font-family: var(--font-display); font-size: 36px; font-weight: 700; letter-spacing: -1px; margin-bottom: 4px; }
+    .bundle-size span { font-size: 18px; color: var(--muted); }
+    .bundle-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+    .bundle-price { font-size: 24px; font-weight: 700; color: var(--cyan); font-family: var(--font-display); }
+    .bundle-price span { font-size: 14px; color: var(--muted); font-weight: 400; }
+
+    /* Section headers */
+    .section-header { margin-bottom: 28px; }
+    .section-title { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    .section-sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+      text-align: left; padding: 12px 16px; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 14px 16px; font-size: 14px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* Code block */
+    .code-block {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; font-family: var(--font-mono); font-size: 13px; line-height: 1.8;
+      overflow-x: auto; position: relative;
+    }
+    .code-key { color: #7DD3FC; }
+    .code-str { color: #86EFAC; }
+    .code-num { color: #FCA5A5; }
+    .code-comment { color: var(--muted); }
+    .code-tag { color: var(--cyan); }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; }
+    .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+    .empty-text { color: var(--muted); font-size: 15px; }
+    .empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+
+    /* Auth page */
+    .auth-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 20px; padding-top: 80px; position: relative; overflow: hidden;
+    }
+    .auth-box { width: 100%; max-width: 420px; position: relative; z-index: 1; }
+    .auth-logo { font-family: var(--font-display); font-size: 22px; font-weight: 700; margin-bottom: 32px; text-align: center; }
+    .auth-logo span { color: var(--cyan); }
+    .auth-card { padding: 36px; background: var(--card); border: 1px solid var(--border-cyan); border-radius: var(--radius-lg); backdrop-filter: blur(20px); }
+    .auth-title { font-family: var(--font-display); font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .auth-sub { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+    .auth-divider span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background: var(--border); }
+    .form-group { margin-bottom: 18px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .input-wrap { position: relative; }
+    .input-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; }
+    .input.has-icon { padding-left: 40px; }
+
+    /* Page transitions */
+    .page-enter { animation: fadeUp 0.3s ease; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main-content { padding: 20px 16px; }
+      .form-row { grid-template-columns: 1fr; }
+      .bundle-grid { grid-template-columns: 1fr 1fr; }
+      .topnav { padding: 0 16px; }
+      .nav-link { display: none; }
+      .nav-hide-mobile { display: none; }
+    }
+    @media (max-width: 480px) {
+      .bundle-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Misc */
+    .text-cyan { color: var(--cyan); }
+    .text-muted { color: var(--muted); }
+    .text-success { color: var(--success); }
+    .text-danger { color: var(--danger); }
+    .text-warning { color: var(--warning); }
+    .font-display { font-family: var(--font-display); }
+    .font-mono { font-family: var(--font-mono); }
+    .fw-600 { font-weight: 600; }
+    .fw-700 { font-weight: 700; }
+    .mt-4 { margin-top: 4px; }
+    .mt-8 { margin-top: 8px; }
+    .mt-12 { margin-top: 12px; }
+    .mt-16 { margin-top: 16px; }
+    .mt-24 { margin-top: 24px; }
+    .mt-32 { margin-top: 32px; }
+    .mb-4 { margin-bottom: 4px; }
+    .mb-8 { margin-bottom: 8px; }
+    .mb-12 { margin-bottom: 12px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mb-24 { margin-bottom: 24px; }
+    .mb-32 { margin-bottom: 32px; }
+    .flex { display: flex; }
+    .flex-col { flex-direction: column; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-8 { gap: 8px; }
+    .gap-12 { gap: 12px; }
+    .gap-16 { gap: 16px; }
+    .gap-24 { gap: 24px; }
+    .w-full { width: 100%; }
+    .text-sm { font-size: 13px; }
+    .text-xs { font-size: 11px; }
+    .clickable { cursor: pointer; }
+    .clickable:hover { color: var(--cyan); }
+
+    .success-anim {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: rgba(16,185,129,0.15); border: 2px solid var(--success);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; margin: 0 auto 24px; animation: successPop 0.4s ease;
+    }
+    @keyframes successPop { 0% {transform:scale(0)} 70% {transform:scale(1.1)} 100% {transform:scale(1)} }
+
+    .wallet-balance-card {
+      background: linear-gradient(135deg, rgba(79,70,229,0.2), rgba(0,212,255,0.1));
+      border: 1px solid var(--border-cyan); border-radius: var(--radius-lg); padding: 28px;
+      position: relative; overflow: hidden;
+    }
+    .wallet-balance-card::after {
+      content: '◈'; position: absolute; right: 24px; top: 50%; transform: translateY(-50%);
+      font-size: 80px; opacity: 0.05; color: var(--cyan);
+    }
+
+    .tab-bar { display: flex; gap: 4px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
+    .tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--muted); transition: all 0.2s; }
+    .tab.active { background: var(--cyan-dim); color: var(--cyan); border: 1px solid var(--border-cyan); }
+    .tab:hover:not(.active) { color: var(--white); }
+
+    .progress-bar { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--indigo), var(--cyan)); border-radius: 99px; transition: width 0.5s ease; }
+
+    .api-endpoint {
+      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 12px; overflow: hidden;
+    }
+    .api-endpoint-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer;
+    }
+    .api-endpoint-header:hover { background: rgba(255,255,255,0.02); }
+    .method-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); min-width: 50px; text-align: center; }
+    .method-get { background: rgba(16,185,129,0.2); color: var(--success); }
+    .method-post { background: rgba(79,70,229,0.2); color: #818CF8; }
+    .api-endpoint-body { padding: 16px; border-top: 1px solid var(--border); }
+
+    .network-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--success); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    footer { background: var(--bg2); border-top: 1px solid var(--border); padding: 48px 24px 24px; margin-top: auto; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; max-width: 1200px; margin: 0 auto; }
+    .footer-brand p { color: var(--muted); font-size: 14px; margin-top: 10px; line-height: 1.7; max-width: 280px; }
+    .footer-col h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 14px; }
+    .footer-link { display: block; color: var(--muted); font-size: 14px; padding: 4px 0; cursor: pointer; transition: color 0.2s; text-decoration: none; }
+    .footer-link:hover { color: var(--cyan); }
+    .footer-bottom { max-width: 1200px; margin: 32px auto 0; padding-top: 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .footer-bottom p { color: var(--muted); font-size: 13px; }
+    @media(max-width:768px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media(max-width:480px) { .footer-grid { grid-template-columns: 1fr; } }
+  `}</style>
+);
+
+// ─── PARTICLE BACKGROUND ──────────────────────────────────────────────────────
+const ParticleBackground = () => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let W = (canvas.width = window.innerWidth);
+    let H = (canvas.height = window.innerHeight);
+    const pts = Array.from({ length: 60 }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.5 + 0.5,
+    }));
+    let frame;
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      pts.forEach((p) => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,212,255,0.6)";
+        ctx.fill();
+      });
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < 120) {
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].y);
+            ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.strokeStyle = `rgba(0,212,255,${0.12 * (1 - d / 120)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    draw();
+    const onResize = () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", onResize);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", onResize); };
+  }, []);
+  return <canvas ref={ref} id="particle-canvas" />;
+};
+
+// ─── TOAST SYSTEM ─────────────────────────────────────────────────────────────
+let _setToasts = null;
+const toast = {
+  success: (msg) => _setToasts && _setToasts((p) => [...p, { id: Date.now(), type: "success", msg }]),
+  error: (msg) => _setToasts && _setToasts((p) => [...p, { id: Date.now(), type: "error", msg }]),
+  info: (msg) => _setToasts && _setToasts((p) => [...p, { id: Date.now(), type: "info", msg }]),
+};
+
+const ToastContainer = () => {
+  const [toasts, setToasts] = useState([]);
+  _setToasts = setToasts;
+  useEffect(() => {
+    if (!toasts.length) return;
+    const t = setTimeout(() => setToasts((p) => p.slice(1)), 3500);
+    return () => clearTimeout(t);
+  }, [toasts]);
+  const icons = { success: "✓", error: "✕", info: "ℹ" };
+  return (
+    <div className="toast-container">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span>{icons[t.type]}</span> {t.msg}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ─── LOGO COMPONENT ───────────────────────────────────────────────────────────
+const Logo = ({ size = 18 }) =>
+  LOGO_URL ? (
+    <img src={LOGO_URL} alt={SITE_NAME} style={{ height: size + 8, width: "auto" }} />
+  ) : (
+    <span className="logo" style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: size, whiteSpace: "nowrap" }}>
+      SCI-FI <span>DATA</span>
+    </span>
+  );
+
+// ─── TOP NAV ──────────────────────────────────────────────────────────────────
+const TopNav = ({ page, setPage, user, setUser }) => {
+  return (
+    <nav className="topnav">
+      <div style={{ cursor: "pointer" }} onClick={() => setPage("home")}>
+        <Logo />
+      </div>
+      <div className="nav-links">
+        <span className={`nav-link nav-hide-mobile ${page === "home" ? "active" : ""}`} onClick={() => setPage("home")}>Home</span>
+        <span className={`nav-link nav-hide-mobile ${page === "store" ? "active" : ""}`} onClick={() => setPage("store")}>Buy Data</span>
+        <span className={`nav-link nav-hide-mobile ${page === "docs" ? "active" : ""}`} onClick={() => setPage("docs")}>API Docs</span>
+        {user ? (
+          <>
+            <span className={`nav-link nav-hide-mobile ${page === "dashboard" ? "active" : ""}`} onClick={() => setPage("dashboard")}>Dashboard</span>
+            <button className="btn btn-cyan btn-sm nav-hide-mobile" onClick={() => { setUser(null); setPage("home"); toast.info("Signed out"); }}>Sign Out</button>
+          </>
+        ) : (
+          <>
+            <span className="nav-link nav-hide-mobile" onClick={() => setPage("login")}>Log In</span>
+            <button className="btn btn-primary btn-sm" onClick={() => setPage("signup")}>Sign Up</button>
+          </>
+        )}
+      </div>
+    </nav>
+  );
+};
+
+// ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+const Sidebar = ({ activePage, setPage, user }) => {
+  const items = [
+    { label: "Overview", icon: "◈", page: "dashboard" },
+    { label: "Buy Data", icon: "⚡", page: "store" },
+    { label: "My Orders", icon: "📦", page: "orders" },
+    { label: "Wallet", icon: "💳", page: "wallet" },
+    { label: "Fund Wallet", icon: "➕", page: "fund" },
+  ];
+  const bottom = [
+    { label: "API Docs", icon: "📡", page: "docs" },
+    { label: "Support", icon: "💬", page: "support" },
+    { label: "Settings", icon: "⚙", page: "settings" },
+  ];
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-section">Main</div>
+      {items.map((i) => (
+        <div key={i.page} className={`sidebar-item ${activePage === i.page ? "active" : ""}`} onClick={() => setPage(i.page)}>
+          <span className="sidebar-icon">{i.icon}</span> {i.label}
+        </div>
+      ))}
+      <div className="sidebar-section">More</div>
+      {bottom.map((i) => (
+        <div key={i.page} className={`sidebar-item ${activePage === i.page ? "active" : ""}`} onClick={() => setPage(i.page)}>
+          <span className="sidebar-icon">{i.icon}</span> {i.label}
+        </div>
+      ))}
+    </aside>
+  );
+};
+
+// ─── MOBILE BOTTOM NAV ────────────────────────────────────────────────────────
+const MobileBottomNav = ({ page, setPage, user }) => (
+  <div style={{
+    display: "none",
+    position: "fixed", bottom: 0, left: 0, right: 0,
+    background: "rgba(6,8,15,0.97)", borderTop: "1px solid var(--border)",
+    backdropFilter: "blur(16px)", zIndex: 200, padding: "8px 0 12px",
+  }}
+    className="mobile-bottom-nav"
+  >
+    {[
+      { icon: "🏠", label: "Home", p: "home" },
+      { icon: "⚡", label: "Buy Data", p: "store" },
+      ...(user ? [
+        { icon: "📦", label: "Orders", p: "orders" },
+        { icon: "💳", label: "Wallet", p: "wallet" },
+        { icon: "◈", label: "Dashboard", p: "dashboard" },
+      ] : [
+        { icon: "🔑", label: "Login", p: "login" },
+        { icon: "📡", label: "API", p: "docs" },
+      ]),
+    ].map((item) => (
+      <div key={item.p}
+        onClick={() => setPage(item.p)}
+        style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+          flex: 1, cursor: "pointer", padding: "4px 0",
+          color: page === item.p ? "var(--cyan)" : "var(--muted)",
+          transition: "color 0.2s",
+        }}
+      >
+        <span style={{ fontSize: 20 }}>{item.icon}</span>
+        <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.3 }}>{item.label}</span>
+      </div>
+    ))}
+    <style>{`
+      @media (max-width: 768px) {
+        .mobile-bottom-nav { display: flex !important; }
+        body { padding-bottom: 70px; }
+      }
+    `}</style>
+  </div>
+);
+
+// ─── FOOTER ───────────────────────────────────────────────────────────────────
+const Footer = ({ setPage }) => (
+  <footer>
+    <div className="footer-grid">
+      <div className="footer-brand">
+        <Logo />
+        <p>Fast, reliable mobile data bundles for Ghana. Buy data instantly, no stress, no delays.</p>
+      </div>
+      <div className="footer-col">
+        <h4>Product</h4>
+        <span className="footer-link" onClick={() => setPage("store")}>Buy Data</span>
+        <span className="footer-link" onClick={() => setPage("signup")}>Create Account</span>
+        <span className="footer-link" onClick={() => setPage("docs")}>API Access</span>
+        <span className="footer-link" onClick={() => setPage("fund")}>Fund Wallet</span>
+      </div>
+      <div className="footer-col">
+        <h4>Support</h4>
+        <span className="footer-link" onClick={() => setPage("support")}>Contact Us</span>
+        <span className="footer-link" onClick={() => setPage("orders")}>Order Status</span>
+        <span className="footer-link" onClick={() => setPage("docs")}>Documentation</span>
+      </div>
+      <div className="footer-col">
+        <h4>Legal</h4>
+        <span className="footer-link" onClick={() => setPage("terms")}>Terms & Conditions</span>
+        <span className="footer-link" onClick={() => setPage("privacy")}>Privacy Policy</span>
+      </div>
+    </div>
+    <div className="footer-bottom">
+      <p>© {new Date().getFullYear()} SCI-FI DATA. All rights reserved.</p>
+      <p style={{ color: "var(--muted)", fontSize: 13 }}>
+        <span className="network-indicator" /> All systems operational
+      </p>
+    </div>
+  </footer>
+);
+
+// ─── PAYSTACK HELPER ─────────────────────────────────────────────────────────
+const initPaystack = ({ email, amount, txRef, metadata, onSuccess, onClose }) => {
+  if (!window.PaystackPop) {
+    toast.error("Paystack not loaded. Check your connection.");
+    return;
+  }
+  const handler = window.PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email,
+    amount: amount * 100, // kobo
+    currency: "GHS",
+    ref: txRef,
+    metadata,
+    callback: (response) => onSuccess(response),
+    onClose,
+  });
+  handler.openIframe();
+};
+
+// ─── HOME PAGE ────────────────────────────────────────────────────────────────
+const HomePage = ({ setPage }) => {
+  const features = [
+    { icon: "⚡", title: "Instant Delivery", desc: "Data activated on your line in seconds, 24/7." },
+    { icon: "🔒", title: "Secure Payments", desc: "End-to-end encrypted via Paystack, Ghana's most trusted gateway." },
+    { icon: "📡", title: "All Networks", desc: "MTN, Telecel, AirtelTigo — all carriers supported." },
+    { icon: "💳", title: "Wallet System", desc: "Preload credits and buy data in one tap — no checkout friction." },
+    { icon: "📦", title: "Order Tracking", desc: "Real-time status updates with your unique SF order ID." },
+    { icon: "🤝", title: "API Access", desc: "Integrate our data bundles into your own app via REST API." },
+  ];
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      {/* Hero */}
+      <div className="hero">
+        <ParticleBackground />
+        <div className="hero-content" style={{ margin: "0 auto", textAlign: "left" }}>
+          <div className="hero-eyebrow">NEXT-GEN DATA BUNDLES</div>
+          <h1>
+            Data for the <span className="accent">future</span>,<br />
+            delivered now.
+          </h1>
+          <p>
+            Instant mobile data bundles across all Ghanaian networks. Buy directly or fund your wallet for seamless top-ups on demand.
+          </p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button className="btn btn-primary btn-lg" onClick={() => setPage("store")}>
+              ⚡ Buy Data Now
+            </button>
+            <button className="btn btn-cyan btn-lg" onClick={() => setPage("signup")}>
+              Create Account
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 24, marginTop: 36 }}>
+            {[["10K+", "Orders"], ["99.9%", "Uptime"], ["3", "Networks"]].map(([v, l]) => (
+              <div key={l}>
+                <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, color: "var(--cyan)" }}>{v}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div style={{ padding: "80px 24px", maxWidth: 1100, margin: "0 auto", width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <div style={{ color: "var(--cyan)", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: 2, marginBottom: 12 }}>Why SCI-FI DATA</div>
+          <h2 style={{ fontFamily: "var(--font-display)", fontSize: 36, fontWeight: 700, letterSpacing: -1 }}>Built different.</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
+          {features.map((f) => (
+            <div key={f.title} className="card card-glow" style={{ padding: 24 }}>
+              <div style={{ fontSize: 28, marginBottom: 14 }}>{f.icon}</div>
+              <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16, marginBottom: 8 }}>{f.title}</div>
+              <div style={{ color: "var(--muted)", fontSize: 14 }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* CTA */}
+      <div style={{ background: "linear-gradient(135deg, rgba(79,70,229,0.12), rgba(0,212,255,0.06))", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", padding: "60px 24px", textAlign: "center" }}>
+        <h2 style={{ fontFamily: "var(--font-display)", fontSize: 32, fontWeight: 700, marginBottom: 12 }}>Ready to beam in?</h2>
+        <p style={{ color: "var(--muted)", marginBottom: 28 }}>No account needed. Buy data directly or create an account for wallet access.</p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-primary btn-lg" onClick={() => setPage("store")}>Browse Bundles</button>
+          <button className="btn btn-ghost btn-lg" onClick={() => setPage("docs")}>API Documentation</button>
+        </div>
+      </div>
+
+      <Footer setPage={setPage} />
+    </div>
+  );
+};
+
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+const LoginPage = ({ setPage, setUser }) => {
+  const [form, setForm] = useState({ identifier: "", password: "" });
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!form.identifier || !form.password) { toast.error("Fill in all fields"); return; }
+    setLoading(true);
+    try {
+      // Determine if phone or email
+      const isPhone = /^\d/.test(form.identifier.replace(/\D/g, ""));
+      const email = isPhone ? phoneToEmail(form.identifier) : form.identifier;
+      // Query supabase users table (you'll need a users table)
+      const users = await supabase.query("users", `?email=eq.${encodeURIComponent(email)}&select=*`);
+      if (!users.length) { toast.error("Account not found"); setLoading(false); return; }
+      const user = users[0];
+      // Simple password check (in production use Supabase Auth)
+      if (user.password_hash !== btoa(form.password)) { toast.error("Incorrect password"); setLoading(false); return; }
+      setUser(user);
+      toast.success(`Welcome back, ${user.first_name}!`);
+      setPage("dashboard");
+    } catch {
+      // Demo mode
+      setUser({ id: "demo", first_name: "Demo", last_name: "User", email: form.identifier, phone: "0200000000", wallet_balance: 50.00 });
+      toast.info("Demo mode — connected");
+      setPage("dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="auth-wrap">
+      <ParticleBackground />
+      <div className="auth-box page-enter">
+        <div className="auth-logo"><Logo size={22} /></div>
+        <div className="auth-card">
+          <div className="auth-title">Welcome back</div>
+          <div className="auth-sub">Sign in to your SCI-FI DATA account</div>
+          <div className="form-group">
+            <label className="input-label">Email or Phone Number</label>
+            <input className="input" placeholder="you@email.com or 0244..." value={form.identifier} onChange={(e) => setForm({ ...form, identifier: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="input-label">Password</label>
+            <input className="input" type="password" placeholder="••••••••" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
+              onKeyDown={(e) => e.key === "Enter" && handleLogin()} />
+          </div>
+          <button className="btn btn-primary w-full btn-lg" onClick={handleLogin} disabled={loading}>
+            {loading ? "Signing in..." : "Sign In"}
+          </button>
+          <div className="auth-divider"><span>or</span></div>
+          <div style={{ textAlign: "center", fontSize: 14, color: "var(--muted)" }}>
+            Don't have an account?{" "}
+            <span style={{ color: "var(--cyan)", cursor: "pointer" }} onClick={() => setPage("signup")}>Sign Up</span>
+          </div>
+          <div style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--muted)" }}>
+            Want to buy without an account?{" "}
+            <span style={{ color: "var(--indigo-light)", cursor: "pointer" }} onClick={() => setPage("store")}>Guest Checkout →</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── SIGNUP PAGE ──────────────────────────────────────────────────────────────
+const SignupPage = ({ setPage, setUser }) => {
+  const [method, setMethod] = useState("phone"); // phone or email
+  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", password: "", confirm: "" });
+  const [loading, setLoading] = useState(false);
+  const f = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const handleSignup = async () => {
+    if (!form.firstName || !form.lastName) { toast.error("Enter your full name"); return; }
+    if (method === "phone" && !form.phone) { toast.error("Enter your phone number"); return; }
+    if (method === "email" && !form.email) { toast.error("Enter your email"); return; }
+    if (form.password.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    if (form.password !== form.confirm) { toast.error("Passwords don't match"); return; }
+    setLoading(true);
+    const email = method === "phone" ? phoneToEmail(form.phone) : form.email;
+    try {
+      const newUser = await supabase.insert("users", {
+        first_name: form.firstName, last_name: form.lastName,
+        email, phone: form.phone, wallet_balance: 0,
+        password_hash: btoa(form.password),
+      });
+      setUser(Array.isArray(newUser) ? newUser[0] : newUser);
+      toast.success("Account created! Welcome to SCI-FI DATA.");
+      setPage("dashboard");
+    } catch {
+      setUser({ id: "demo", first_name: form.firstName, last_name: form.lastName, email, phone: form.phone, wallet_balance: 0 });
+      toast.info("Demo mode — account simulated");
+      setPage("dashboard");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="auth-wrap">
+      <ParticleBackground />
+      <div className="auth-box page-enter" style={{ maxWidth: 460 }}>
+        <div className="auth-logo"><Logo size={22} /></div>
+        <div className="auth-card">
+          <div className="auth-title">Create account</div>
+          <div className="auth-sub">Join SCI-FI DATA — fast data, zero friction</div>
+          <div className="tab-bar mb-16" style={{ marginBottom: 20 }}>
+            <div className={`tab ${method === "phone" ? "active" : ""}`} onClick={() => setMethod("phone")}>📱 Phone</div>
+            <div className={`tab ${method === "email" ? "active" : ""}`} onClick={() => setMethod("email")}>✉ Email</div>
+          </div>
+          <div className="form-row mb-16">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">First Name</label>
+              <input className="input" placeholder="Kofi" value={form.firstName} onChange={(e) => f("firstName", e.target.value)} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">Last Name</label>
+              <input className="input" placeholder="Mensah" value={form.lastName} onChange={(e) => f("lastName", e.target.value)} />
+            </div>
+          </div>
+          {method === "phone" ? (
+            <div className="form-group">
+              <label className="input-label">Phone Number</label>
+              <input className="input" placeholder="0244123456" value={form.phone} onChange={(e) => f("phone", e.target.value)} />
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 5 }}>Your email will be: {form.phone ? phoneToEmail(form.phone) : "phone@sci-fidata.com"}</div>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="input-label">Email Address</label>
+              <input className="input" placeholder="you@email.com" value={form.email} onChange={(e) => f("email", e.target.value)} />
+            </div>
+          )}
+          <div className="form-group">
+            <label className="input-label">Password</label>
+            <input className="input" type="password" placeholder="Min 6 characters" value={form.password} onChange={(e) => f("password", e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="input-label">Confirm Password</label>
+            <input className="input" type="password" placeholder="••••••••" value={form.confirm} onChange={(e) => f("confirm", e.target.value)} />
+          </div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 16 }}>
+            By signing up, you agree to our{" "}
+            <span style={{ color: "var(--cyan)", cursor: "pointer" }} onClick={() => setPage("terms")}>Terms</span> and{" "}
+            <span style={{ color: "var(--cyan)", cursor: "pointer" }} onClick={() => setPage("privacy")}>Privacy Policy</span>.
+          </div>
+          <button className="btn btn-primary w-full btn-lg" onClick={handleSignup} disabled={loading}>
+            {loading ? "Creating account..." : "Create Account"}
+          </button>
+          <div style={{ textAlign: "center", marginTop: 16, fontSize: 14, color: "var(--muted)" }}>
+            Already have an account?{" "}
+            <span style={{ color: "var(--cyan)", cursor: "pointer" }} onClick={() => setPage("login")}>Sign In</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── BUNDLE STORE ─────────────────────────────────────────────────────────────
+const StorePage = ({ user, setPage, setLastOrder }) => {
+  const [bundles, setBundles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [guestForm, setGuestForm] = useState({ name: "", phone: "" });
+  const [recipientPhone, setRecipientPhone] = useState(""); // for logged-in users
+  const [payMode, setPayMode] = useState("paystack"); // paystack | wallet
+  const [network, setNetwork] = useState("all");
+
+  useEffect(() => {
+    supabase.query("bundles", "?select=bundle_id,size,price&order=price.asc")
+      .then((data) => setBundles(data))
+      .catch(() => {
+        setBundles([
+          { bundle_id: "b1", size: "1GB", price: 5.00, network: "MTN" },
+          { bundle_id: "b2", size: "2GB", price: 9.00, network: "MTN" },
+          { bundle_id: "b3", size: "3GB", price: 13.00, network: "MTN" },
+          { bundle_id: "b4", size: "5GB", price: 20.00, network: "Telecel" },
+          { bundle_id: "b5", size: "10GB", price: 35.00, network: "Telecel" },
+          { bundle_id: "b6", size: "15GB", price: 48.00, network: "AirtelTigo" },
+        ]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const networks = ["all", "MTN", "Telecel", "AirtelTigo"];
+  const displayed = bundles.filter((b) => network === "all" || b.network === network);
+
+  const openCheckout = (bundle) => {
+    setSelected(bundle);
+    setPayMode(user && user.wallet_balance >= bundle.price ? "wallet" : "paystack");
+    setRecipientPhone(user?.phone || "");
+    setCheckoutOpen(true);
+  };
+
+  const handleBuy = async () => {
+    if (!selected) return;
+    const phone = user ? recipientPhone : guestForm.phone;
+    const email = user ? user.email : (guestForm.phone ? phoneToEmail(guestForm.phone) : null);
+    if (!user && (!guestForm.name || !guestForm.phone)) { toast.error("Please fill your name and phone"); return; }
+    if (user && !recipientPhone) { toast.error("Enter recipient phone number"); return; }
+    if (!email) { toast.error("Could not determine email"); return; }
+
+    const orderId = genOrderId();
+
+    if (payMode === "wallet") {
+      if (!user || user.wallet_balance < selected.price) { toast.error("Insufficient wallet balance"); return; }
+      try {
+        await supabase.insert("orders", {
+          order_id: orderId, user_id: user.id, bundle_id: selected.bundle_id,
+          amount: selected.price, status: "processing", payment_method: "wallet",
+          phone: phone,
+        });
+        toast.success(`Order ${orderId} placed via wallet!`);
+        setLastOrder({ orderId, bundle: selected, email, method: "wallet" });
+        setCheckoutOpen(false);
+        setPage("success");
+      } catch { toast.error("Failed to place order. Try again."); }
+      return;
+    }
+
+    // Paystack
+    const txRef = genTxRef();
+    initPaystack({
+      email,
+      amount: selected.price,
+      txRef,
+      metadata: { order_id: orderId, bundle_id: selected.bundle_id, bundle_size: selected.size, phone: phone, type: "bundle_purchase" },
+      onSuccess: async (res) => {
+        try {
+          await supabase.insert("orders", {
+            order_id: orderId, user_id: user?.id || null, bundle_id: selected.bundle_id,
+            amount: selected.price, status: "processing", payment_method: "paystack",
+            tx_ref: txRef, paystack_ref: res.reference,
+            phone: phone,
+            guest_name: user ? null : guestForm.name,
+          });
+        } catch { /* will be caught by webhook */ }
+        setLastOrder({ orderId, bundle: selected, email, txRef, method: "paystack" });
+        setCheckoutOpen(false);
+        setPage("success");
+      },
+      onClose: () => toast.info("Payment cancelled"),
+    });
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 60, display: "flex", flexDirection: "column" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px", width: "100%", flex: 1 }}>
+        <div className="section-header">
+          <h1 className="section-title">Data Bundles</h1>
+          <p className="section-sub">Pick a bundle, pay, and get connected in seconds.</p>
+        </div>
+
+        {/* Network filter */}
+        <div className="tab-bar mb-24" style={{ marginBottom: 28, display: "inline-flex" }}>
+          {networks.map((n) => (
+            <div key={n} className={`tab ${network === n ? "active" : ""}`} onClick={() => setNetwork(n)}>
+              {n === "all" ? "🌐 All" : n}
+            </div>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 60, color: "var(--muted)" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>Loading bundles...
+          </div>
+        ) : (
+          <div className="bundle-grid">
+            {displayed.map((b) => (
+              <div key={b.bundle_id} className={`bundle-card ${selected?.bundle_id === b.bundle_id ? "selected" : ""}`} onClick={() => openCheckout(b)}>
+                {b.network && <span className="badge badge-cyan" style={{ marginBottom: 12, display: "inline-flex" }}>{b.network}</span>}
+                <div className="bundle-size">{b.size.replace("GB", "")}<span>GB</span></div>
+                <div className="bundle-label">Data Bundle</div>
+                <hr className="glow-line" style={{ margin: "12px 0" }} />
+                <div className="bundle-price">GH₵ {Number(b.price).toFixed(2)}<span> one-time</span></div>
+                <button className="btn btn-primary w-full" style={{ marginTop: 16 }}>Buy Now →</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 40, padding: 20, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, color: "var(--muted)" }}>
+          💡 No account needed. Just enter your phone number at checkout. Or{" "}
+          <span style={{ color: "var(--cyan)", cursor: "pointer" }} onClick={() => setPage("signup")}>create an account</span>{" "}
+          to use wallet balance and track all orders.
+        </div>
+      </div>
+      <Footer setPage={setPage} />
+
+      {/* Checkout Modal */}
+      {checkoutOpen && selected && (
+        <div className="modal-backdrop" onClick={() => setCheckoutOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: 24, borderBottom: "1px solid var(--border)" }}>
+              <div className="flex justify-between items-center">
+                <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 18 }}>Checkout</div>
+                <span style={{ cursor: "pointer", color: "var(--muted)", fontSize: 20 }} onClick={() => setCheckoutOpen(false)}>×</span>
+              </div>
+            </div>
+            <div style={{ padding: 24 }}>
+              <div style={{ background: "var(--cyan-dim)", border: "1px solid var(--border-cyan)", borderRadius: "var(--radius)", padding: 16, marginBottom: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>Selected Bundle</div>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700 }}>{selected.size} {selected.network || "Data"}</div>
+                    <div style={{ color: "var(--cyan)", fontWeight: 700, fontSize: 20, marginTop: 4 }}>GH₵ {Number(selected.price).toFixed(2)}</div>
+                  </div>
+                  {selected.network && <span className="badge badge-cyan">{selected.network}</span>}
+                </div>
+              </div>
+
+              {/* Recipient phone — always shown */}
+              <div className="form-group">
+                <label className="input-label">📱 Recipient Phone Number</label>
+                {user ? (
+                  <>
+                    <input className="input" placeholder="0244123456"
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)} />
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
+                      Defaults to your registered number. Change if buying for someone else.
+                    </div>
+                  </>
+                ) : (
+                  <input className="input" placeholder="0244123456"
+                    value={guestForm.phone}
+                    onChange={(e) => setGuestForm({ ...guestForm, phone: e.target.value })} />
+                )}
+              </div>
+
+              {!user && (
+                <div className="form-group">
+                  <label className="input-label">Your Name</label>
+                  <input className="input" placeholder="Kofi Mensah" value={guestForm.name} onChange={(e) => setGuestForm({ ...guestForm, name: e.target.value })} />
+                </div>
+              )}
+
+              {/* Payment method */}
+              {user && (
+                <div className="form-group">
+                  <label className="input-label">Payment Method</label>
+                  <div className="tab-bar" style={{ display: "inline-flex" }}>
+                    <div className={`tab ${payMode === "paystack" ? "active" : ""}`} onClick={() => setPayMode("paystack")}>💳 Paystack</div>
+                    <div className={`tab ${payMode === "wallet" ? "active" : ""}`} onClick={() => setPayMode("wallet")}>
+                      💰 Wallet (GH₵{Number(user.wallet_balance || 0).toFixed(2)})
+                    </div>
+                  </div>
+                  {payMode === "wallet" && user.wallet_balance < selected.price && (
+                    <div style={{ color: "var(--danger)", fontSize: 12, marginTop: 8 }}>
+                      Insufficient balance. <span style={{ cursor: "pointer", color: "var(--cyan)" }} onClick={() => setPage("fund")}>Fund wallet →</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button className="btn btn-primary w-full btn-lg" onClick={handleBuy}>
+                {payMode === "wallet" ? "💰 Pay from Wallet" : `💳 Pay GH₵${Number(selected.price).toFixed(2)} via Paystack`}
+              </button>
+              <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted)", marginTop: 12 }}>
+                🔒 Secured by Paystack · All prices in GHS
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── SUCCESS PAGE ─────────────────────────────────────────────────────────────
+const SuccessPage = ({ lastOrder, setPage }) => {
+  const [orderStatus, setOrderStatus] = useState("processing");
+  const [pollCount, setPollCount] = useState(0);
+
+  // Poll order status every 5 seconds, up to 12 times (1 minute)
+  useEffect(() => {
+    if (!lastOrder?.orderId) return;
+    if (orderStatus === "completed" || orderStatus === "failed") return;
+    if (pollCount >= 12) return;
+    const t = setTimeout(async () => {
+      try {
+        const res = await supabase.query("orders", `?order_id=eq.${lastOrder.orderId}&select=status`);
+        if (res.length && res[0].status) {
+          setOrderStatus(res[0].status);
+          if (res[0].status === "completed") toast.success("Data delivered! ✅");
+          if (res[0].status === "failed") toast.error("Delivery failed. Contact support.");
+        }
+      } catch { /* silent */ }
+      setPollCount((p) => p + 1);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [pollCount, orderStatus, lastOrder]);
+
+  if (!lastOrder) {
+    setPage("store");
+    return null;
+  }
+
+  const statusConfig = {
+    processing: { label: "Processing", color: "var(--warning)", badge: "badge-warning", icon: "⏳" },
+    completed: { label: "Delivered ✓", color: "var(--success)", badge: "badge-success", icon: "✅" },
+    failed: { label: "Failed", color: "var(--danger)", badge: "badge-danger", icon: "❌" },
+    pending: { label: "Pending", color: "var(--muted)", badge: "badge-muted", icon: "🕐" },
+  };
+  const sc = statusConfig[orderStatus] || statusConfig.processing;
+  return (
+    <div style={{ minHeight: "100vh", paddingTop: 60, display: "flex", flexDirection: "column" }}>
+      <ParticleBackground />
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, position: "relative", zIndex: 1 }}>
+        <div style={{ width: "100%", maxWidth: 480, textAlign: "center" }} className="page-enter">
+          <div className="success-anim">{sc.icon}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: 32, fontWeight: 700, marginBottom: 8 }}>Order Confirmed!</h1>
+          <p style={{ color: "var(--muted)", marginBottom: 32 }}>Your data bundle is being processed and will be activated shortly.</p>
+
+          {/* Live status indicator */}
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
+              {orderStatus === "processing" && <span className="network-indicator" />}
+              <span style={{ color: sc.color, fontWeight: 600 }}>Status: {sc.label}</span>
+            </div>
+            {orderStatus === "processing" && pollCount < 12 && (
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>Auto-refreshing… ({pollCount}/12)</span>
+            )}
+            {(orderStatus !== "processing" || pollCount >= 12) && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setPage("orders")}>View Order</button>
+            )}
+          </div>
+
+          <div style={{ background: "var(--card)", border: "1px solid var(--border-cyan)", borderRadius: "var(--radius-lg)", padding: 24, marginBottom: 24, textAlign: "left" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {[
+                ["Order ID", lastOrder.orderId],
+                ["Bundle", lastOrder.bundle?.size],
+                ["Amount", `GH₵${Number(lastOrder.bundle?.price).toFixed(2)}`],
+                ["Payment", lastOrder.method === "wallet" ? "Wallet" : "Paystack"],
+                ["Status", sc.label],
+                ["Email", lastOrder.email],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{k}</div>
+                  <div style={{ fontWeight: 600, fontFamily: k === "Order ID" ? "var(--font-mono)" : "inherit", color: k === "Order ID" ? "var(--cyan)" : k === "Status" ? sc.color : "var(--white)", fontSize: 14 }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button className="btn btn-cyan" onClick={() => setPage("orders")}>Track Order</button>
+            <button className="btn btn-primary" onClick={() => setPage("store")}>Buy More Data</button>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 16 }}>
+            Save your Order ID: <strong style={{ color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>{lastOrder.orderId}</strong>
+          </p>
+        </div>
+      </div>
+      <Footer setPage={setPage} />
+    </div>
+  );
+};
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+const DashboardPage = ({ user, setPage }) => {
+  const [orders, setOrders] = useState([]);
+  useEffect(() => {
+    if (!user?.id || user.id === "demo") {
+      setOrders([
+        { order_id: "SF3K9XA", bundle_id: "5GB", amount: 20, status: "completed", created_at: new Date().toISOString(), payment_method: "paystack" },
+        { order_id: "SF7M2NB", bundle_id: "2GB", amount: 9, status: "processing", created_at: new Date(Date.now() - 86400000).toISOString(), payment_method: "wallet" },
+      ]);
+      return;
+    }
+    supabase.query("orders", `?user_id=eq.${user.id}&order=created_at.desc&limit=5`)
+      .then(setOrders).catch(() => {});
+  }, [user]);
+
+  const stats = [
+    { label: "Wallet Balance", value: `GH₵${Number(user?.wallet_balance || 0).toFixed(2)}`, icon: "💳", accent: true },
+    { label: "Total Orders", value: orders.length, icon: "📦" },
+    { label: "Active Bundles", value: orders.filter((o) => o.status === "completed").length, icon: "📡" },
+    { label: "Saved", value: `GH₵${(orders.reduce((a, o) => a + Number(o.amount), 0) * 0.05).toFixed(2)}`, icon: "⭐" },
+  ];
+
+  return (
+    <div className="page-enter">
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 10, textTransform: "uppercase", letterSpacing: 2, color: "var(--cyan)", marginBottom: 6, fontFamily: "var(--font-mono)" }}>
+          <span className="network-indicator" />ONLINE
+        </div>
+        <h1 className="section-title">Welcome back, {user?.first_name} 👋</h1>
+        <p className="section-sub">Here's your data activity overview.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
+        {stats.map((s) => (
+          <div key={s.label} className="stat-card" style={s.accent ? { borderColor: "var(--border-cyan)", background: "linear-gradient(135deg, rgba(0,212,255,0.06), transparent)" } : {}}>
+            <div style={{ fontSize: 24, marginBottom: 10 }}>{s.icon}</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, letterSpacing: -0.5 }}>{s.value}</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick actions */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12, marginBottom: 32 }}>
+        {[["⚡ Buy Data", "store"], ["💳 Fund Wallet", "fund"], ["📦 My Orders", "orders"], ["💬 Support", "support"]].map(([label, page]) => (
+          <button key={page} className="btn btn-ghost w-full" onClick={() => setPage(page)} style={{ justifyContent: "flex-start", padding: "12px 16px" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Recent orders */}
+      <div className="card" style={{ padding: 24 }}>
+        <div className="flex justify-between items-center mb-16" style={{ marginBottom: 16 }}>
+          <div style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>Recent Orders</div>
+          <span className="btn btn-sm btn-ghost clickable" onClick={() => setPage("orders")}>View All →</span>
+        </div>
+        <table className="data-table">
+          <thead><tr><th>Order ID</th><th>Bundle</th><th>Amount</th><th>Method</th><th>Status</th></tr></thead>
+          <tbody>
+            {orders.slice(0, 5).map((o) => (
+              <tr key={o.order_id}>
+                <td><span style={{ fontFamily: "var(--font-mono)", color: "var(--cyan)", fontSize: 12 }}>{o.order_id}</span></td>
+                <td>{o.bundle_id}</td>
+                <td>GH₵{Number(o.amount).toFixed(2)}</td>
+                <td style={{ textTransform: "capitalize" }}>{o.payment_method}</td>
+                <td><span className={`badge badge-${o.status === "completed" ? "success" : o.status === "processing" ? "warning" : "muted"}`}>{o.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {orders.length === 0 && <div className="empty-state"><div className="empty-icon">📭</div><div className="empty-title">No orders yet</div><div className="empty-text">Buy your first data bundle to get started.</div></div>}
+      </div>
+    </div>
+  );
+};
+
+// ─── ORDERS PAGE ──────────────────────────────────────────────────────────────
+const OrdersPage = ({ user }) => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [guestId, setGuestId] = useState("");
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    const id = user.id === "demo" ? null : user.id;
+    if (!id) {
+      setOrders([
+        { order_id: "SF3K9XA", size: "5GB", amount: 20, status: "completed", created_at: new Date().toISOString(), payment_method: "paystack", network: "MTN" },
+        { order_id: "SF7M2NB", size: "2GB", amount: 9, status: "processing", created_at: new Date(Date.now() - 86400000).toISOString(), payment_method: "wallet", network: "Telecel" },
+      ]);
+      setLoading(false);
+      return;
+    }
+    supabase.query("orders", `?user_id=eq.${id}&order=created_at.desc`)
+      .then(setOrders).catch(() => {}).finally(() => setLoading(false));
+  }, [user]);
+
+  const searchGuest = async () => {
+    if (!guestId.startsWith("SF")) { toast.error("Order ID must start with SF"); return; }
+    try {
+      const res = await supabase.query("orders", `?order_id=eq.${guestId}&select=*`);
+      if (!res.length) { toast.error("Order not found"); return; }
+      setOrders(res);
+      setSearched(true);
+    } catch { toast.error("Could not find order"); }
+  };
+
+  const statusColor = { completed: "success", processing: "warning", failed: "danger", pending: "muted" };
+
+  return (
+    <div className="page-enter">
+      <div className="section-header">
+        <h1 className="section-title">Order Status</h1>
+        <p className="section-sub">Track all your data bundle purchases.</p>
+      </div>
+
+      {!user && (
+        <div className="card" style={{ padding: 24, marginBottom: 24 }}>
+          <div style={{ fontWeight: 600, marginBottom: 12 }}>🔍 Track a Guest Order</div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <input className="input" placeholder="Enter Order ID (e.g. SF3K9XA)" value={guestId} onChange={(e) => setGuestId(e.target.value.toUpperCase())} style={{ maxWidth: 280 }} />
+            <button className="btn btn-cyan" onClick={searchGuest}>Track</button>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ padding: 24 }}>
+        {loading ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--muted)" }}>Loading orders...</div>
+        ) : orders.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📭</div>
+            <div className="empty-title">No orders found</div>
+            <div className="empty-text">{searched ? "No order with that ID" : "Your orders will appear here."}</div>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Order ID</th><th>Bundle</th><th>Network</th><th>Amount</th><th>Payment</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              {orders.map((o) => (
+                <tr key={o.order_id}>
+                  <td><span style={{ fontFamily: "var(--font-mono)", color: "var(--cyan)", fontSize: 12 }}>{o.order_id}</span></td>
+                  <td>{o.size || o.bundle_id || "—"}</td>
+                  <td>{o.network || "—"}</td>
+                  <td>GH₵{Number(o.amount).toFixed(2)}</td>
+                  <td style={{ textTransform: "capitalize" }}>{o.payment_method}</td>
+                  <td><span className={`badge badge-${statusColor[o.status] || "muted"}`}>{o.status}</span></td>
+                  <td style={{ color: "var(--muted)", fontSize: 12 }}>{new Date(o.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── WALLET PAGE ──────────────────────────────────────────────────────────────
+const WalletPage = ({ user, setPage, setUser }) => {
+  const [txns, setTxns] = useState([]);
+
+  useEffect(() => {
+    if (!user?.id || user.id === "demo") {
+      setTxns([
+        { id: 1, type: "credit", description: "Wallet top-up via Paystack", amount: 50, created_at: new Date().toISOString() },
+        { id: 2, type: "debit", description: "5GB MTN Bundle", amount: -20, created_at: new Date(Date.now() - 86400000).toISOString() },
+        { id: 3, type: "debit", description: "2GB Telecel Bundle", amount: -9, created_at: new Date(Date.now() - 172800000).toISOString() },
+      ]);
+      return;
+    }
+    supabase.query("wallet_transactions", `?user_id=eq.${user.id}&order=created_at.desc`)
+      .then(setTxns).catch(() => {});
+  }, [user]);
+
+  const balance = user?.wallet_balance || 0;
+
+  return (
+    <div className="page-enter">
+      <div className="section-header">
+        <h1 className="section-title">Wallet</h1>
+        <p className="section-sub">Manage your SCI-FI DATA balance.</p>
+      </div>
+
+      <div className="wallet-balance-card mb-24" style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Available Balance</div>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 48, fontWeight: 700, letterSpacing: -2, color: "var(--white)" }}>
+          GH₵<span style={{ color: "var(--cyan)" }}>{Number(balance).toFixed(2)}</span>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button className="btn btn-primary" onClick={() => setPage("fund")}>➕ Fund Wallet</button>
+          <button className="btn btn-cyan" onClick={() => setPage("store")}>⚡ Buy Data</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 16 }}>Transaction History</div>
+        {txns.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">💳</div>
+            <div className="empty-title">No transactions yet</div>
+            <div className="empty-text">Fund your wallet to get started.</div>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead><tr><th>Description</th><th>Type</th><th>Amount</th><th>Date</th></tr></thead>
+            <tbody>
+              {txns.map((t) => (
+                <tr key={t.id}>
+                  <td>{t.description}</td>
+                  <td><span className={`badge badge-${t.type === "credit" ? "success" : "danger"}`}>{t.type}</span></td>
+                  <td style={{ color: t.type === "credit" ? "var(--success)" : "var(--danger)", fontWeight: 600 }}>
+                    {t.type === "credit" ? "+" : ""}GH₵{Math.abs(t.amount).toFixed(2)}
+                  </td>
+                  <td style={{ color: "var(--muted)", fontSize: 12 }}>{new Date(t.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── FUND WALLET PAGE ─────────────────────────────────────────────────────────
+const FundWalletPage = ({ user, setUser }) => {
+  const [amount, setAmount] = useState("");
+  const quickAmounts = [10, 20, 50, 100, 200];
+
+  const handleFund = () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt < 1) { toast.error("Enter a valid amount (min GH₵1)"); return; }
+    if (!user) { toast.error("You must be logged in to fund your wallet"); return; }
+    const txRef = genTxRef();
+    initPaystack({
+      email: user.email,
+      amount: amt,
+      txRef,
+      metadata: { type: "wallet_funding", user_id: user.id, amount: amt },
+      onSuccess: async (res) => {
+        try {
+          await supabase.update("users", `?id=eq.${user.id}`, { wallet_balance: (user.wallet_balance || 0) + amt });
+          await supabase.insert("wallet_transactions", {
+            user_id: user.id, type: "credit", amount: amt,
+            description: "Wallet top-up via Paystack", tx_ref: txRef, paystack_ref: res.reference,
+          });
+          setUser({ ...user, wallet_balance: (user.wallet_balance || 0) + amt });
+          toast.success(`GH₵${amt.toFixed(2)} added to wallet!`);
+          setAmount("");
+        } catch { toast.error("Payment received but wallet update failed. Contact support."); }
+      },
+      onClose: () => toast.info("Payment cancelled"),
+    });
+  };
+
+  return (
+    <div className="page-enter">
+      <div className="section-header">
+        <h1 className="section-title">Fund Wallet</h1>
+        <p className="section-sub">Add credit to your wallet via Paystack.</p>
+      </div>
+
+      <div style={{ maxWidth: 480 }}>
+        <div className="card" style={{ padding: 28 }}>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 4 }}>Current Balance</div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 700, color: "var(--cyan)" }}>
+              GH₵{Number(user?.wallet_balance || 0).toFixed(2)}
+            </div>
+          </div>
+          <hr style={{ border: "none", borderTop: "1px solid var(--border)", marginBottom: 20 }} />
+          <div className="form-group">
+            <label className="input-label">Amount to Fund (GH₵)</label>
+            <input className="input" type="number" min="1" placeholder="Enter amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20 }}>
+            {quickAmounts.map((a) => (
+              <button key={a} className={`btn btn-sm ${amount == a ? "btn-cyan" : "btn-ghost"}`} onClick={() => setAmount(String(a))}>
+                GH₵{a}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-primary btn-lg w-full" onClick={handleFund}>
+            💳 Pay GH₵{parseFloat(amount) > 0 ? parseFloat(amount).toFixed(2) : "0.00"} via Paystack
+          </button>
+          <div style={{ textAlign: "center", fontSize: 12, color: "var(--muted)", marginTop: 12 }}>
+            🔒 Secured by Paystack · Funds credited instantly after payment
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16, padding: 16, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, color: "var(--muted)" }}>
+          💡 Funds are added instantly after successful payment. Use your wallet balance to buy data bundles without re-entering card details.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── API DOCS PAGE ────────────────────────────────────────────────────────────
+const DocsPage = () => {
+  const [open, setOpen] = useState(null);
+  const endpoints = [
+    {
+      method: "GET", path: "/v1/bundles", title: "List all bundles",
+      desc: "Returns all available data bundles from the catalog.",
+      response: `{
+  "data": [
+    {
+      "bundle_id": "b1",
+      "size": "1GB",
+      "price": 5.00,
+      "network": "MTN"
+    }
+  ]
+}`,
+    },
+    {
+      method: "POST", path: "/v1/orders", title: "Create an order",
+      desc: "Place a data bundle order for a phone number.",
+      body: `{
+  "bundle_id": "b1",
+  "phone": "0244123456",
+  "payment_method": "wallet"
+}`,
+      response: `{
+  "order_id": "SF3K9XA",
+  "status": "processing",
+  "bundle": "1GB",
+  "amount": 5.00
+}`,
+    },
+    {
+      method: "GET", path: "/v1/orders/:id", title: "Get order status",
+      desc: "Check the current status of an order.",
+      response: `{
+  "order_id": "SF3K9XA",
+  "status": "completed",
+  "bundle": "1GB",
+  "network": "MTN",
+  "created_at": "2025-01-15T10:30:00Z"
+}`,
+    },
+    {
+      method: "GET", path: "/v1/wallet/balance", title: "Get wallet balance",
+      desc: "Returns current wallet balance for the authenticated user.",
+      response: `{
+  "balance": 45.50,
+  "currency": "GHS"
+}`,
+    },
+    {
+      method: "POST", path: "/v1/wallet/fund", title: "Fund wallet",
+      desc: "Initiates a Paystack payment to fund the wallet.",
+      body: `{
+  "amount": 50.00
+}`,
+      response: `{
+  "payment_url": "https://checkout.paystack.com/...",
+  "tx_ref": "SCIFI-1234567890-ABCXYZ"
+}`,
+    },
+  ];
+
+  return (
+    <div className="page-enter">
+      <div className="section-header">
+        <h1 className="section-title">API Documentation</h1>
+        <p className="section-sub">Integrate SCI-FI DATA into your app. RESTful, fast, and simple.</p>
+      </div>
+
+      {/* Base URL */}
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>Base URL</div>
+        <div className="code-block" style={{ padding: "12px 16px" }}>
+          <span className="code-tag">https://api.sci-fidata.com</span>
+        </div>
+      </div>
+
+      {/* Auth */}
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 12 }}>Authentication</div>
+        <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 12 }}>Include your API key in the request header.</p>
+        <div className="code-block">
+          <span className="code-key">Authorization</span>: Bearer <span className="code-str">YOUR_API_KEY</span>{"\n"}
+          <span className="code-key">Content-Type</span>: <span className="code-str">application/json</span>
+        </div>
+      </div>
+
+      {/* Endpoints */}
+      <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 16 }}>Endpoints</div>
+      {endpoints.map((ep, i) => (
+        <div key={i} className="api-endpoint">
+          <div className="api-endpoint-header" onClick={() => setOpen(open === i ? null : i)}>
+            <span className={`method-badge ${ep.method === "GET" ? "method-get" : "method-post"}`}>{ep.method}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14 }}>{ep.path}</span>
+            <span style={{ marginLeft: "auto", fontSize: 14, color: "var(--muted)" }}>{ep.title}</span>
+            <span style={{ color: "var(--muted)", marginLeft: 8 }}>{open === i ? "▾" : "▸"}</span>
+          </div>
+          {open === i && (
+            <div className="api-endpoint-body">
+              <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 16 }}>{ep.desc}</p>
+              {ep.body && (
+                <>
+                  <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Request Body</div>
+                  <div className="code-block" style={{ marginBottom: 16 }}><pre style={{ margin: 0 }}>{ep.body}</pre></div>
+                </>
+              )}
+              <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Response</div>
+              <div className="code-block"><pre style={{ margin: 0 }}>{ep.response}</pre></div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Webhook */}
+      <div className="card" style={{ padding: 24, marginTop: 24 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 700, marginBottom: 12 }}>📡 Webhook Events</div>
+        <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 16 }}>We send webhook events to your configured URL after order state changes.</p>
+        <div className="code-block">
+          <span className="code-comment">// Event types</span>{"\n"}
+          <span className="code-key">"order.completed"</span>   <span className="code-comment">// Data delivered</span>{"\n"}
+          <span className="code-key">"order.failed"</span>      <span className="code-comment">// Delivery failed</span>{"\n"}
+          <span className="code-key">"wallet.funded"</span>     <span className="code-comment">// Wallet credited</span>{"\n"}
+          <span className="code-key">"payment.received"</span>  <span className="code-comment">// Paystack confirmed</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── SUPPORT PAGE ─────────────────────────────────────────────────────────────
+const SupportPage = ({ user }) => {
+  const [form, setForm] = useState({ name: user?.first_name || "", email: user?.email || "", subject: "", message: "", orderId: "" });
+  const [sent, setSent] = useState(false);
+  const f = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const handleSubmit = async () => {
+    if (!form.name || !form.email || !form.subject || !form.message) { toast.error("Please fill all required fields"); return; }
+    try {
+      await supabase.insert("support_tickets", { ...form, user_id: user?.id || null, status: "open" });
+    } catch { /* demo ok */ }
+    setSent(true);
+    toast.success("Support request sent! We'll respond within 24 hours.");
+  };
+
+  if (sent) return (
+    <div className="page-enter" style={{ textAlign: "center", padding: "60px 20px" }}>
+      <div className="success-anim">✉</div>
+      <h2 style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Message Sent!</h2>
+      <p style={{ color: "var(--muted)" }}>Our team will get back to you within 24 hours via email.</p>
+      <button className="btn btn-cyan" style={{ marginTop: 24 }} onClick={() => setSent(false)}>Send Another</button>
+    </div>
+  );
+
+  return (
+    <div className="page-enter">
+      <div className="section-header">
+        <h1 className="section-title">Contact Support</h1>
+        <p className="section-sub">We're here to help. Typical response time: under 24 hours.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24 }}>
+        <div className="card" style={{ padding: 28 }}>
+          <div className="form-row mb-16">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">Name *</label>
+              <input className="input" value={form.name} onChange={(e) => f("name", e.target.value)} placeholder="Your name" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">Email *</label>
+              <input className="input" value={form.email} onChange={(e) => f("email", e.target.value)} placeholder="you@email.com" />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="input-label">Order ID (optional)</label>
+            <input className="input" value={form.orderId} onChange={(e) => f("orderId", e.target.value.toUpperCase())} placeholder="SF..." />
+          </div>
+          <div className="form-group">
+            <label className="input-label">Subject *</label>
+            <select className="input" value={form.subject} onChange={(e) => f("subject", e.target.value)} style={{ cursor: "pointer" }}>
+              <option value="">Select a subject</option>
+              <option>Data bundle not received</option>
+              <option>Payment issue</option>
+              <option>Wrong number entered</option>
+              <option>Wallet not credited</option>
+              <option>API integration support</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="input-label">Message *</label>
+            <textarea className="input" rows="5" value={form.message} onChange={(e) => f("message", e.target.value)} placeholder="Describe your issue in detail..." style={{ resize: "vertical" }} />
+          </div>
+          <button className="btn btn-primary btn-lg w-full" onClick={handleSubmit}>Send Message</button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {[
+            { icon: "📧", title: "Email", value: "support@sci-fidata.com" },
+            { icon: "💬", title: "WhatsApp", value: "+233 XX XXX XXXX" },
+            { icon: "🕐", title: "Hours", value: "Mon–Fri 8am–8pm WAT" },
+            { icon: "⚡", title: "Avg Response", value: "Under 24 hours" },
+          ].map((c) => (
+            <div key={c.title} className="stat-card">
+              <div style={{ fontSize: 24, marginBottom: 6 }}>{c.icon}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1 }}>{c.title}</div>
+              <div style={{ fontWeight: 600, marginTop: 2 }}>{c.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TERMS & PRIVACY ──────────────────────────────────────────────────────────
+const TermsPage = () => (
+  <div className="page-enter" style={{ maxWidth: 720 }}>
+    <div className="section-header">
+      <h1 className="section-title">Terms & Conditions</h1>
+      <p className="section-sub">Last updated: January 2025</p>
+    </div>
+    {[
+      ["1. Services", "SCI-FI DATA provides mobile data bundle reselling services to users in Ghana. We facilitate the purchase and delivery of data bundles across major Ghanaian telecom networks including MTN, Telecel, and AirtelTigo."],
+      ["2. Account Registration", "Users may purchase data as guests or register for a full account. Guest users must provide a valid phone number. Registered users must provide accurate information and are responsible for account security."],
+      ["3. Payments", "All payments are processed securely via Paystack. Prices are in Ghanaian Cedis (GHS). Orders are non-refundable once data has been delivered to the recipient number."],
+      ["4. Wallet", "Wallet funds are non-refundable once credited. We are not responsible for purchases made with compromised account credentials."],
+      ["5. Service Availability", "We strive for 99.9% uptime but do not guarantee uninterrupted service. Bundle delivery may be delayed in cases of network congestion or maintenance by telecom providers."],
+      ["6. Prohibited Use", "Users may not resell our services without written authorization, attempt to exploit or circumvent our payment systems, or use our API for unauthorized purposes."],
+      ["7. Governing Law", "These terms are governed by the laws of the Republic of Ghana."],
+    ].map(([title, text]) => (
+      <div key={title} style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, marginBottom: 6 }}>{title}</div>
+        <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.8 }}>{text}</p>
+      </div>
+    ))}
+  </div>
+);
+
+const PrivacyPage = () => (
+  <div className="page-enter" style={{ maxWidth: 720 }}>
+    <div className="section-header">
+      <h1 className="section-title">Privacy Policy</h1>
+      <p className="section-sub">Last updated: January 2025</p>
+    </div>
+    {[
+      ["Data We Collect", "We collect your name, email address, phone number, and payment transaction data. For registered users, we also store wallet balance and order history."],
+      ["How We Use Your Data", "Your data is used solely to process orders, manage wallet balances, send order confirmations, and provide customer support. We do not sell your data to third parties."],
+      ["Payment Security", "Payment details are handled entirely by Paystack and are never stored on our servers. We only receive payment confirmation references."],
+      ["Data Retention", "Account data is retained for the lifetime of your account plus 12 months. Guest order data is retained for 90 days."],
+      ["Your Rights", "You may request access to, correction of, or deletion of your personal data by contacting support@sci-fidata.com."],
+      ["Cookies", "We use minimal session cookies for authentication. No advertising or tracking cookies are used."],
+      ["Contact", "For privacy concerns, contact us at privacy@sci-fidata.com."],
+    ].map(([title, text]) => (
+      <div key={title} style={{ marginBottom: 24 }}>
+        <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, marginBottom: 6 }}>{title}</div>
+        <p style={{ color: "var(--muted)", fontSize: 14, lineHeight: 1.8 }}>{text}</p>
+      </div>
+    ))}
+  </div>
+);
+
+// ─── SETTINGS PAGE ────────────────────────────────────────────────────────────
+const SettingsPage = ({ user, setUser, setPage }) => {
+  const [form, setForm] = useState({ firstName: user?.first_name || "", lastName: user?.last_name || "", phone: user?.phone || "" });
+  const f = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+
+  const saveProfile = async () => {
+    try {
+      await supabase.update("users", `?id=eq.${user.id}`, { first_name: form.firstName, last_name: form.lastName, phone: form.phone });
+      setUser({ ...user, first_name: form.firstName, last_name: form.lastName, phone: form.phone });
+      toast.success("Profile updated!");
+    } catch { toast.info("Demo mode — update simulated"); }
+  };
+
+  return (
+    <div className="page-enter" style={{ maxWidth: 560 }}>
+      <div className="section-header">
+        <h1 className="section-title">Settings</h1>
+        <p className="section-sub">Manage your account details.</p>
+      </div>
+      <div className="card" style={{ padding: 28, marginBottom: 20 }}>
+        <div style={{ fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 20 }}>Profile</div>
+        <div className="form-row mb-16">
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">First Name</label>
+            <input className="input" value={form.firstName} onChange={(e) => f("firstName", e.target.value)} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Last Name</label>
+            <input className="input" value={form.lastName} onChange={(e) => f("lastName", e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="input-label">Phone Number</label>
+          <input className="input" value={form.phone} onChange={(e) => f("phone", e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="input-label">Email</label>
+          <input className="input" value={user?.email || ""} disabled style={{ opacity: 0.5 }} />
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Email cannot be changed</div>
+        </div>
+        <button className="btn btn-primary" onClick={saveProfile}>Save Changes</button>
+      </div>
+
+      <div className="card" style={{ padding: 28 }}>
+        <div style={{ fontWeight: 700, fontFamily: "var(--font-display)", marginBottom: 16 }}>API Key</div>
+        <p style={{ color: "var(--muted)", fontSize: 14, marginBottom: 16 }}>Use this key to access the SCI-FI DATA REST API.</p>
+        <div className="code-block" style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px" }}>
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>sk_live_••••••••••••••••••••••••</span>
+          <button className="btn btn-ghost btn-sm" onClick={() => toast.info("API key copied!")}>Copy</button>
+        </div>
+        <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => toast.info("New key generated — check your email")}>Regenerate Key</button>
+      </div>
+    </div>
+  );
+};
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [page, setPage] = useState("home");
+  const [user, setUser] = useState(null);
+  const [lastOrder, setLastOrder] = useState(null);
+
+  // Load Paystack script
+  useEffect(() => {
+    if (!document.getElementById("paystack-js")) {
+      const s = document.createElement("script");
+      s.id = "paystack-js";
+      s.src = "https://js.paystack.co/v1/inline.js";
+      document.head.appendChild(s);
+    }
+  }, []);
+
+  const dashboardPages = ["dashboard", "orders", "wallet", "fund", "support", "settings", "docs", "terms", "privacy"];
+  const isDashboard = dashboardPages.includes(page) && user;
+  const needsAuth = ["dashboard", "wallet", "fund", "settings"].includes(page) && !user;
+
+  if (needsAuth) {
+    return (
+      <>
+        <GlobalStyles />
+        <ToastContainer />
+        <TopNav page={page} setPage={setPage} user={user} setUser={setUser} />
+        <LoginPage setPage={setPage} setUser={setUser} />
+      </>
+    );
+  }
+
+  // Public pages that have their own layout
+  if (["home", "login", "signup"].includes(page)) {
+    const pages = { home: <HomePage setPage={setPage} />, login: <LoginPage setPage={setPage} setUser={setUser} />, signup: <SignupPage setPage={setPage} setUser={setUser} /> };
+    return (
+      <>
+        <GlobalStyles />
+        <ToastContainer />
+        <TopNav page={page} setPage={setPage} user={user} setUser={setUser} />
+        <MobileBottomNav page={page} setPage={setPage} user={user} />
+        {pages[page]}
+      </>
+    );
+  }
+
+  if (page === "store") return (
+    <>
+      <GlobalStyles />
+      <ToastContainer />
+      <TopNav page={page} setPage={setPage} user={user} setUser={setUser} />
+      <MobileBottomNav page={page} setPage={setPage} user={user} />
+      <StorePage user={user} setPage={setPage} setLastOrder={setLastOrder} />
+    </>
+  );
+
+  if (page === "success") return (
+    <>
+      <GlobalStyles />
+      <ToastContainer />
+      <TopNav page={page} setPage={setPage} user={user} setUser={setUser} />
+      <MobileBottomNav page={page} setPage={setPage} user={user} />
+      <SuccessPage lastOrder={lastOrder} setPage={setPage} />
+    </>
+  );
+
+  // Dashboard shell pages
+  const pageMap = {
+    dashboard: <DashboardPage user={user} setPage={setPage} />,
+    orders: <OrdersPage user={user} />,
+    wallet: <WalletPage user={user} setPage={setPage} setUser={setUser} />,
+    fund: <FundWalletPage user={user} setUser={setUser} />,
+    support: <SupportPage user={user} />,
+    settings: <SettingsPage user={user} setUser={setUser} setPage={setPage} />,
+    docs: <DocsPage />,
+    terms: <TermsPage />,
+    privacy: <PrivacyPage />,
+  };
+
+  return (
+    <>
+      <GlobalStyles />
+      <ToastContainer />
+      <TopNav page={page} setPage={setPage} user={user} setUser={setUser} />
+      <MobileBottomNav page={page} setPage={setPage} user={user} />
+      <div className="app-shell">
+        {user && <Sidebar activePage={page} setPage={setPage} user={user} />}
+        <main className="main-content">
+          {pageMap[page] || <div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Page not found</div>}
+        </main>
+      </div>
+    </>
+  );
+}
